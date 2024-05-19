@@ -1,0 +1,13 @@
+{
+  "name": "Admin System",
+  "tree": {
+    "$className": "DataModel",
+
+    "ServerScriptService": {
+      "$ignoreUnknownInstances": true,
+      "MainModule": {
+        "$path": "src"
+      }
+    }
+  }
+}
