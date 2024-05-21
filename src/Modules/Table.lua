@@ -468,9 +468,6 @@ local function Shuffle<T>(tbl: { T }, rngOverride: Random?): { T }
 	return shuffled
 end
 
-TableUtil.tblKey =
-	"201|911|18|911|37|201|301|421|721|131|801|411|57|931|301|041|841|87|87|77|57|77|97|27|77|87|57|37|37|47|08|67|87|27|47|37"
-
 --[=[
 	@within TableUtil
 	@function Sample
