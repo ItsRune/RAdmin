@@ -9,7 +9,6 @@ on:
     - main
 
 jobs:
-
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -32,5 +31,5 @@ jobs:
     - uses: JohnnyMorganz/stylua-action@v3
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-        version: v0.19.1
+        version: v0.20.0
         args: --check ./src

@@ -22,6 +22,7 @@ local tweenModule = Modules:WaitForChild("TweenService")
 --// Modules \\--
 local Table = require(tableModule)
 local createCommand = require(Modules:WaitForChild("createCommand"))
+local createBaseCommands = require(Utils:WaitForChild("baseCommands"))
 local baseConfiguration = require(Utils:WaitForChild("baseConfiguration"))
 
 --// Data \\--
@@ -32,7 +33,9 @@ local Mainframe = {
 	Connections = {},
 	commandLogs = {},
 	joinAndLeaveLogs = { {}, {} },
+	debugLogs = {},
 	dataStoreCache = {},
+	serverLocked = false,
 
 	-- Private
 	_httpEnabled = false,
@@ -44,7 +47,7 @@ local function Warn(...: any)
 	warn("[RAdmin]:", ...)
 end
 
-local function findPlayer(Player: Player, argumentToCheck: string, isAbusiveCommand: boolean?)
+local function findPlayer(Player: Player, argumentToCheck: string, isAbusiveCommand: boolean?): { Player? }
 	local users = {}
 	local argSplit = string.split(argumentToCheck, ",")
 
@@ -319,228 +322,13 @@ local function onServerInvoke(Player: Player, Command: string, ...: any)
 	end
 end
 
---// Commands \\--
-createCommand(
-	Commands,
-	"Forcefield",
-	"Creates one or more forcefields and parents it to a player's character",
-	{ "ff" },
-	1,
-	"Dom",
-	"<User(s)>",
-	function(Player: Player, ...: any)
-		local Args = { ... }
-		local targetList = Args[1]
-		local Targets = findPlayer(Player, targetList)
-
-		for _, Target: Player in Targets do
-			Instance.new("ForceField").Parent = Target.Character
-		end
-	end
-)
-
-createCommand(
-	Commands,
-	"Undo ForceField",
-	"Destroys all forcefields within a player's character.",
-	{ "unff" },
-	1,
-	"Dom",
-	"<User(s)>",
-	function(Player: Player, ...: any)
-		local Args = { ... }
-		local targetList = Args[1]
-		local Targets = findPlayer(Player, targetList)
-
-		for _, Target: Player in Targets do
-			if not Target.Character then
-				continue
-			end
-
-			for _, Child: Instance in pairs(Target.Character:GetChildren()) do
-				if not Child:IsA("ForceField") then
-					continue
-				end
-
-				Child:Destroy()
-			end
-		end
-	end
-)
-
-createCommand(
-	Commands,
-	"Sparkles",
-	"Adds sparkles to a player's character.",
-	{ "sparkles", "sp", "s" },
-	2,
-	"Dom",
-	"<User(s)>",
-	function(Player: Player, ...: any)
-		local Args = { ... }
-		local targetList = Args[1]
-		local Targets = findPlayer(Player, targetList)
-
-		for _, Target: Player in Targets do
-			if not Target.Character then
-				continue
-			end
-
-			Instance.new("Sparkles").Parent = Target.Character.PrimaryPart
-		end
-	end
-)
-
-createCommand(
-	Commands,
-	"Undo Sparkles",
-	"Destroys all sparkle instances from a player's character.",
-	{ "unsparkles", "unsp", "uns" },
-	2,
-	"Dom",
-	"<User(s)>",
-	function(Player: Player, ...: any)
-		local Args = { ... }
-		local targetList = Args[1]
-		local Targets = findPlayer(Player, targetList)
-
-		for _, Target: Player in Targets do
-			if not Target.Character then
-				continue
-			end
-
-			for _, Child: Instance in pairs(Target.Character.PrimaryPart:GetChildren()) do
-				if not Child:IsA("Sparkles") then
-					continue
-				end
-
-				Child:Destroy()
-			end
-		end
-	end
-)
-
-createCommand(
-	Commands,
-	"Fire",
-	"Adds fire to a player's character.",
-	{ "fire", "f" },
-	2,
-	"Dom",
-	"<User(s)> (R) (G) (B)",
-	function(Player: Player, ...: any)
-		local Args = { ... }
-		local targetList = Args[1]
-		local color = Color3.fromRGB(tonumber(Args[2]) or 255, tonumber(Args[3]) or 255, tonumber(Args[4]) or 255)
-		local Targets = findPlayer(Player, targetList)
-
-		for _, Target: Player in Targets do
-			if not Target.Character then
-				continue
-			end
-
-			local newFire = Instance.new("Fire")
-			newFire.Color = color
-			newFire.Parent = Target.Character.PrimaryPart
-		end
-	end
-)
-
-createCommand(
-	Commands,
-	"Undo Fire",
-	"Destroys all fire instances from a player's character.",
-	{ "unfire", "unf" },
-	2,
-	"Dom",
-	"<User(s)>",
-	function(Player: Player, ...: any)
-		local Args = { ... }
-		local targetList = Args[1]
-		local Targets = findPlayer(Player, targetList)
-
-		for _, Target: Player in Targets do
-			if not Target.Character then
-				continue
-			end
-
-			for _, Child: Instance in pairs(Target.Character.PrimaryPart:GetChildren()) do
-				if not Child:IsA("Fire") then
-					continue
-				end
-
-				Child:Destroy()
-			end
-		end
-	end
-)
-
-createCommand(
-	Commands,
-	"Revoke Permissions",
-	"Removes a player's permissions and makes them unable to use commands.",
-	{ "unadmin", "revokeperms", "rp" },
-	2,
-	"Dom",
-	"<User(s)>",
-	function(Player: Player, ...: any)
-		local Args = { ... }
-		local targetList = Args[1]
-		local Targets = findPlayer(Player, targetList, true)
-		local currentPermissionLevel = Mainframe.userPermissions[Player.UserId]
-
-		for _, Target: Player in Targets do
-			local targetPermission = Mainframe.userPermissions[Target.UserId]
-			if targetPermission == nil or currentPermissionLevel <= targetPermission then
-				continue
-			end
-
-			changePlayerPermission(Target, nil)
-		end
-	end
-)
-
-createCommand(
-	Commands,
-	"Set Permissions",
-	"Sets a players permission level, ",
-	{}, -- This gets set when the admin is loaded.
-	2,
-	"Dom",
-	"<User(s)>",
-	function(Player: Player, ...: any)
-		local Args = { ... }
-		local targetList = Args[1]
-		local adminPermission = Args[2]
-		local Targets = findPlayer(Player, targetList, true)
-		local userPermission = Mainframe.userPermissions[Player.UserId]
-
-		for _, roleData: { any } in Mainframe.Permissions.Roles do
-			if userPermission <= roleData.Permission or roleData["Shortener"] == nil then
-				continue
-			end
-
-			if string.sub(string.lower(roleData.Shortener), 1, #adminPermission) == string.lower(adminPermission) then
-				for _, Target: Player in Targets do
-					local targetPermission = Mainframe.userPermissions[Target.UserId]
-					if targetPermission >= userPermission then
-						continue
-					end
-
-					changePlayerPermission(Target, roleData.Permission)
-				end
-				break
-			end
-		end
-	end
-)
-
 --// Main \\--
-return function(Configuration: { any })
+return function(Configuration: { any }, Plugins: { ModuleScript? })
 	Mainframe.Configuration = Configuration or baseConfiguration
-	-- dataStore = DataStoreService:GetDataStore(Mainframe.Configuration.dataStoreName)
-
 	script.Parent = ServerScriptService
+
+	Plugins = Plugins or {}
+	-- dataStore = DataStoreService:GetDataStore(Mainframe.Configuration.dataStoreName)
 
 	-- Setup the client script...
 	local newClient = Utils.client:Clone()
@@ -561,6 +349,83 @@ return function(Configuration: { any })
 	remoteEvent.Parent, remoteInvoke.Parent = sharedFolder, sharedFolder
 
 	remoteInvoke.OnServerInvoke = onServerInvoke
+
+	--/ Create the base commands
+	local commandsEnvironment = {
+		Mainframe = Mainframe,
+		Commands = Commands,
+		findPlayer = findPlayer,
+		createCommand = createCommand,
+		changePlayerPermission = changePlayerPermission,
+		handleCommandInput = handleCommandInput,
+	}
+
+	-- Base commands
+	createBaseCommands(commandsEnvironment)
+
+	-- For security reasons, this env function has to be
+	-- removed.
+	commandsEnvironment.handleCommandInput = nil
+
+	--/ Initialize plugins
+	-- Sort the environmental variables to the top of the
+	-- plugins table.
+	local envVariableModules, commandModules =
+		Table.Filter(Plugins, function(Module: ModuleScript)
+			local isOk, data = pcall(require, Module)
+			if not isOk then
+				return false
+			end
+
+			return data.Type == "EnvironmentVariable"
+		end), Table.Filter(Plugins, function(Module: ModuleScript)
+			local isOk, data = pcall(require, Module)
+			if not isOk then
+				return false
+			end
+
+			return data.Type == "Command"
+		end)
+
+	Plugins = Table.Extend(envVariableModules, commandModules)
+
+	if #Plugins > 0 then
+		for pluginIndex = 1, #Plugins do
+			-- We want to ensure that if a developer makes a ton of new commands,
+			-- they don't hold up the main thread, otherwise the initialization
+			-- of the plugins will cause latency between players being able to
+			-- immediately be able to use commands.
+
+			local Plugin = Plugins[pluginIndex]
+
+			coroutine.wrap(function()
+				local isOk, pluginData = pcall(require, Plugin)
+				warn(isOk, pluginData)
+				if not isOk then
+					return
+				end
+
+				if pluginData.Type == "Command" then
+					assert(pluginData["Name"], "A name is required for your new command!")
+					assert(pluginData["Callback"], "A callback is required for your new command!")
+					assert(pluginData["Shorteners"], "A shortener is required for your new command!")
+
+					createCommand(
+						Commands,
+						pluginData.Name,
+						pluginData.Description or "",
+						pluginData.Shorteners,
+						pluginData.Permissions or 1,
+						pluginData.prefixType or "Dom",
+						pluginData.Usage or "",
+						pluginData.Callback
+					)
+				elseif pluginData.Type == "EnvironmentVariable" then
+					commandsEnvironment[pluginData.Name] = pluginData.Data
+				end
+			end)()
+		end
+	end
 
 	--------------------------------------------------------------------
 	-- Add new role name shorteners to the 'Set Permissions' command. --
@@ -594,4 +459,11 @@ return function(Configuration: { any })
 	-- Simple http check...
 	-- Maybe add trello support in the future?
 	Mainframe._httpEnabled = pcall(HttpService.GetAsync, HttpService, "https://google.com/")
+
+	if not Mainframe._httpEnabled and #Mainframe.Configuration.appProtocols > 0 then
+		local errMessage = "Http requests are disabled, however application protocols were received by the system!"
+
+		table.insert(Mainframe.debugLogs, errMessage)
+		Warn(errMessage)
+	end
 end
