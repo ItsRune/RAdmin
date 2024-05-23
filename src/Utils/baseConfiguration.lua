@@ -4,14 +4,6 @@ return {
 	Permissions = {
 		Roles = {
 			{
-				Name = "Admin Creator",
-				Permission = 5,
-				-- Below is the name shortener for
-				-- 'setperms user shortener' OR 'shortener user'
-				Shortener = "debugger",
-				Users = {}, -- 107392833
-			},
-			{
 				Name = "Game Creator",
 				Permission = 4,
 				-- Below is the name shortener for

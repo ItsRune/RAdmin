@@ -242,7 +242,7 @@ return function(env: environmentVariables)
 	createCommand(
 		Commands,
 		"Set Permissions",
-		"Sets a players permission level, ",
+		"Sets user(s) administrative level.",
 		{}, -- This gets set when the admin is loaded.
 		2,
 		"Dom",
